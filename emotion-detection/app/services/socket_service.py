@@ -1,13 +1,19 @@
 from flask_socketio import emit
 from emotion_detector import EmotionDetector
 import logging
+import os
 
 class SocketService:
     def __init__(self, socketio):
         self.socketio = socketio
-        self.detector = EmotionDetector()
+        # Use singleton instance to avoid reloading model
+        self.detector = EmotionDetector.get_instance()
         self._register_handlers()
-        logging.basicConfig(level=logging.DEBUG)
+        # Only configure logging in development
+        if os.environ.get('FLASK_ENV') == 'development':
+            logging.basicConfig(level=logging.DEBUG)
+        else:
+            logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
     def _register_handlers(self):

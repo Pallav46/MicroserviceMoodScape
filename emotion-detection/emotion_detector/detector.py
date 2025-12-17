@@ -5,11 +5,19 @@ import keras
 from tensorflow.keras.applications.resnet_v2 import preprocess_input
 import time
 import base64
+import os
+import logging
+
+# Global singleton instance
+_detector_instance = None
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 class EmotionDetector:
     def __init__(self):
         """Initialize the EmotionDetector by loading the ResNet50V2 model, Haar Cascade, and music data."""
-        print("Loading models and data...")
+        logger.info("Loading models and data...")
         start_time = time.time()
         
         # Load the pre-trained ResNet50V2 model
@@ -27,8 +35,19 @@ class EmotionDetector:
         # Define emotion classes
         self.emotion_classes = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
         
+        # Enable verbose logging only in development
+        self.verbose = os.environ.get('FLASK_ENV') == 'development'
+        
         load_time = time.time() - start_time
-        print(f"Models and data loaded in {load_time:.2f} seconds.")
+        logger.info(f"Models and data loaded in {load_time:.2f} seconds.")
+
+    @staticmethod
+    def get_instance():
+        """Get or create the singleton instance of EmotionDetector."""
+        global _detector_instance
+        if _detector_instance is None:
+            _detector_instance = EmotionDetector()
+        return _detector_instance
 
     def process_image_file(self, file):
         """Process an image from a file upload to detect emotion and recommend songs."""
@@ -39,7 +58,8 @@ class EmotionDetector:
         npimg = np.frombuffer(filestr, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
         decode_time = time.time()
-        print(f"Image decoding: {decode_time - start_time:.2f}s")
+        if self.verbose:
+            logger.debug(f"Image decoding: {decode_time - start_time:.2f}s")
         
         return self._analyze_image(img, start_time, decode_time)
 
@@ -52,9 +72,11 @@ class EmotionDetector:
             nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             decode_time = time.time()
-            print(f"Image decoding: {decode_time - start_time:.2f}s")
+            if self.verbose:
+                logger.debug(f"Image decoding: {decode_time - start_time:.2f}s")
             return self._analyze_image(img, start_time, decode_time)
         except Exception as e:
+            logger.error(f"Error processing base64 image: {str(e)}")
             return {'error': str(e)}
 
     def _analyze_image(self, img, start_time, decode_time):
@@ -62,7 +84,8 @@ class EmotionDetector:
         # Resize image to 640x480 for faster face detection
         img_resized = cv2.resize(img, (640, 480), interpolation=cv2.INTER_AREA)
         resize_time = time.time()
-        print(f"Image resizing: {resize_time - decode_time:.2f}s")
+        if self.verbose:
+            logger.debug(f"Image resizing: {resize_time - decode_time:.2f}s")
         
         # Convert to grayscale for face detection
         gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
@@ -70,7 +93,8 @@ class EmotionDetector:
         # Detect faces using Haar Cascade
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         detection_time = time.time()
-        print(f"Face detection: {detection_time - resize_time:.2f}s")
+        if self.verbose:
+            logger.debug(f"Face detection: {detection_time - resize_time:.2f}s")
         
         if len(faces) == 0:
             return {'error': 'No face detected'}
@@ -98,22 +122,26 @@ class EmotionDetector:
         face_img = preprocess_input(face_img)  # Apply ResNet50V2 preprocessing
         face_img = np.expand_dims(face_img, axis=0)  # Add batch dimension
         preprocess_time = time.time()
-        print(f"Face preprocessing: {preprocess_time - detection_time:.2f}s")
+        if self.verbose:
+            logger.debug(f"Face preprocessing: {preprocess_time - detection_time:.2f}s")
         
         # Predict emotion using the ResNet50V2 model
-        pred = self.model.predict(face_img)
+        pred = self.model.predict(face_img, verbose=0)  # Disable prediction logging
         emotion_idx = np.argmax(pred)
         emotion = self.emotion_classes[emotion_idx]
         prediction_time = time.time()
-        print(f"Emotion prediction: {prediction_time - preprocess_time:.2f}s")
+        if self.verbose:
+            logger.debug(f"Emotion prediction: {prediction_time - preprocess_time:.2f}s")
         
         # Recommend songs based on the detected emotion
         recommendations = self._recommend_songs(emotion)
         recommendation_time = time.time()
-        print(f"Song recommendation: {recommendation_time - prediction_time:.2f}s")
+        if self.verbose:
+            logger.debug(f"Song recommendation: {recommendation_time - prediction_time:.2f}s")
         
         total_time = time.time() - start_time
-        print(f"Total processing time: {total_time:.2f}s")
+        if self.verbose:
+            logger.debug(f"Total processing time: {total_time:.2f}s")
         
         return {
             'emotion': emotion,
@@ -155,7 +183,7 @@ class EmotionDetector:
 
 # Example usage (uncomment to test)
 if __name__ == "__main__":
-    detector = EmotionDetector()
+    detector = EmotionDetector.get_instance()
     # Test with a file
     img_path="testImages/img3.jpg"
     with open(img_path, "rb") as file:

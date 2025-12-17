@@ -9,10 +9,10 @@ const sequelize = new Sequelize({
   username: process.env.POSTGRES_USER || 'postgres',
   database: process.env.POSTGRES_DB || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
-  logging: process.env.NODE_ENV !== 'production',
+  logging: process.env.NODE_ENV === 'development' ? console.log : false,
   pool: {
-    max: 5,
-    min: 0,
+    max: 10,
+    min: 2,
     acquire: 30000,
     idle: 10000,
   },

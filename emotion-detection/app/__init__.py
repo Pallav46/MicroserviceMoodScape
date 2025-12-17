@@ -4,14 +4,16 @@ from .config.settings import config
 from .routes.emotion_routes import emotion_bp
 from .services.socket_service import SocketService
 import logging
+import os
 
 def create_app(config_object=config):
     """Application factory function"""
     # Initialize Flask
     app = Flask(__name__)
     
-    # Setup logging
-    logging.basicConfig(level=logging.DEBUG)
+    # Setup logging - only DEBUG in development
+    log_level = logging.DEBUG if os.environ.get('FLASK_ENV') == 'development' else logging.INFO
+    logging.basicConfig(level=log_level)
     logger = logging.getLogger(__name__)
     
     # Load configuration
@@ -19,12 +21,14 @@ def create_app(config_object=config):
     app.config['SECRET_KEY'] = 'secret!'  # Required for SocketIO
     
     # Initialize SocketIO with WebSocket support
+    # Disable verbose logging in production
+    enable_logging = os.environ.get('FLASK_ENV') == 'development'
     socketio = SocketIO(
         app,
         cors_allowed_origins="*",
         async_mode=None,  # Let SocketIO choose the best mode
-        logger=True,
-        engineio_logger=True
+        logger=enable_logging,
+        engineio_logger=enable_logging
     )
     
     # Register blueprints

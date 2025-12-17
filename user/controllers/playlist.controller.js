@@ -84,15 +84,10 @@ exports.updatePlaylist = async (req, res) => {
   const userId = req.userId; // Assuming middleware sets this
 
   try {
-    const playlist = await Playlist.findOne({ where: { id } });
+    const playlist = await Playlist.findOne({ where: { id, userId } });
 
     if (!playlist) {
-      return res.status(404).json({ message: 'Playlist not found' });
-    }
-
-    // Check if user owns this playlist
-    if (playlist.userId !== userId) {
-      return res.status(403).json({ message: 'You do not have permission to update this playlist' });
+      return res.status(404).json({ message: 'Playlist not found or you do not have permission to update it' });
     }
 
     // Update playlist
@@ -120,15 +115,10 @@ exports.deletePlaylist = async (req, res) => {
   const userId = req.userId; // Assuming middleware sets this
 
   try {
-    const playlist = await Playlist.findOne({ where: { id } });
+    const playlist = await Playlist.findOne({ where: { id, userId } });
 
     if (!playlist) {
-      return res.status(404).json({ message: 'Playlist not found' });
-    }
-
-    // Check if user owns this playlist
-    if (playlist.userId !== userId) {
-      return res.status(403).json({ message: 'You do not have permission to delete this playlist' });
+      return res.status(404).json({ message: 'Playlist not found or you do not have permission to delete it' });
     }
 
     // Delete playlist (cascade will delete tracks)
@@ -152,15 +142,10 @@ exports.addTrackToPlaylist = async (req, res) => {
   }
 
   try {
-    const playlist = await Playlist.findOne({ where: { id } });
+    const playlist = await Playlist.findOne({ where: { id, userId } });
 
     if (!playlist) {
-      return res.status(404).json({ message: 'Playlist not found' });
-    }
-
-    // Check if user owns this playlist
-    if (playlist.userId !== userId) {
-      return res.status(403).json({ message: 'You do not have permission to modify this playlist' });
+      return res.status(404).json({ message: 'Playlist not found or you do not have permission to modify it' });
     }
 
     // Get the highest position to add the track at the end
@@ -196,15 +181,10 @@ exports.removeTrackFromPlaylist = async (req, res) => {
   const userId = req.userId; // Assuming middleware sets this
 
   try {
-    const playlist = await Playlist.findOne({ where: { id } });
+    const playlist = await Playlist.findOne({ where: { id, userId } });
 
     if (!playlist) {
-      return res.status(404).json({ message: 'Playlist not found' });
-    }
-
-    // Check if user owns this playlist
-    if (playlist.userId !== userId) {
-      return res.status(403).json({ message: 'You do not have permission to modify this playlist' });
+      return res.status(404).json({ message: 'Playlist not found or you do not have permission to modify it' });
     }
 
     // Find the track to remove
@@ -256,8 +236,8 @@ exports.reorderPlaylistTracks = async (req, res) => {
   const { trackOrders } = req.body; // Array of {id, position}
   const userId = req.userId; // Assuming middleware sets this
 
-  if (!Array.isArray(trackOrders)) {
-    return res.status(400).json({ message: 'Track orders must be an array' });
+  if (!Array.isArray(trackOrders) || trackOrders.length === 0) {
+    return res.status(400).json({ message: 'Track orders must be a non-empty array' });
   }
 
   try {
@@ -276,13 +256,33 @@ exports.reorderPlaylistTracks = async (req, res) => {
     const transaction = await sequelize.transaction();
 
     try {
-      // Update each track's position
-      for (const { id: trackId, position } of trackOrders) {
-        await PlaylistTrack.update(
-          { position },
-          { where: { id: trackId, playlistId: id }, transaction }
-        );
+      // Validate that all tracks belong to this playlist
+      const trackIds = trackOrders.map(t => t.id);
+      const existingTracks = await PlaylistTrack.findAll({
+        where: {
+          id: trackIds,
+          playlistId: id
+        },
+        attributes: ['id'],
+        transaction
+      });
+
+      if (existingTracks.length !== trackIds.length) {
+        await transaction.rollback();
+        return res.status(400).json({ message: 'One or more track IDs do not belong to this playlist' });
       }
+
+      // Use bulkCreate with updateOnDuplicate for better performance
+      const updates = trackOrders.map(({ id: trackId, position }) => ({
+        id: trackId,
+        position,
+        playlistId: id
+      }));
+
+      await PlaylistTrack.bulkCreate(updates, {
+        updateOnDuplicate: ['position'],
+        transaction
+      });
 
       await transaction.commit();
       res.status(200).json({ message: 'Playlist tracks reordered successfully' });
