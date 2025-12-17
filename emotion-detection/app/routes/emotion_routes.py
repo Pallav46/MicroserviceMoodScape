@@ -4,8 +4,8 @@ from emotion_detector import EmotionDetector
 # Create blueprint for emotion routes
 emotion_bp = Blueprint('emotion', __name__)
 
-# Initialize EmotionDetector
-detector = EmotionDetector()
+# Initialize EmotionDetector as singleton
+detector = EmotionDetector.get_instance()
 
 @emotion_bp.route('/detect-emotion', methods=['POST'])
 def detect_emotion():
