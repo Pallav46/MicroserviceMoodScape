@@ -46,7 +46,6 @@ const History = sequelize.define('History', {
 }, {
   timestamps: true,
   indexes: [
-    { fields: ['userId'], name: 'history_user_id_idx' },
     { fields: ['userId', 'playedAt'], name: 'history_user_played_at_idx' },
     { fields: ['userId', 'trackId'], name: 'history_user_track_idx' },
   ],

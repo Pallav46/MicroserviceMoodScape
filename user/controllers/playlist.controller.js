@@ -256,6 +256,22 @@ exports.reorderPlaylistTracks = async (req, res) => {
     const transaction = await sequelize.transaction();
 
     try {
+      // Validate that all tracks belong to this playlist
+      const trackIds = trackOrders.map(t => t.id);
+      const existingTracks = await PlaylistTrack.findAll({
+        where: {
+          id: trackIds,
+          playlistId: id
+        },
+        attributes: ['id'],
+        transaction
+      });
+
+      if (existingTracks.length !== trackIds.length) {
+        await transaction.rollback();
+        return res.status(400).json({ message: 'One or more track IDs do not belong to this playlist' });
+      }
+
       // Use bulkCreate with updateOnDuplicate for better performance
       const updates = trackOrders.map(({ id: trackId, position }) => ({
         id: trackId,
