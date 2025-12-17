@@ -7,4 +7,30 @@ const kafka = new Kafka({
 });
 
 const producer = kafka.producer();
-module.exports = producer;
+
+// Initialize producer connection at startup
+let isConnected = false;
+
+const getProducer = async () => {
+  if (!isConnected) {
+    try {
+      await producer.connect();
+      isConnected = true;
+      console.log('Kafka producer connected');
+    } catch (error) {
+      console.error('Failed to connect Kafka producer:', error);
+      throw error;
+    }
+  }
+  return producer;
+};
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  if (isConnected) {
+    await producer.disconnect();
+    isConnected = false;
+  }
+});
+
+module.exports = { producer, getProducer };

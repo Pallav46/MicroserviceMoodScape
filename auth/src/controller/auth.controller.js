@@ -1,5 +1,5 @@
 const User = require("../model/user.model.js");
-const producer = require('../kafka/producer.js');
+const { getProducer } = require('../kafka/producer.js');
 
 
 const authCallback = async (req, res, next) => {
@@ -57,7 +57,7 @@ const deleteUser = async (req, res) => {
   try {
     await User.destroy({ where: { clerkId } });
 
-    await producer.connect();
+    const producer = await getProducer();
     await producer.send({
       topic: 'user.account.delete',
       messages: [
